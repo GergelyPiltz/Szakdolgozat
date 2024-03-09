@@ -1,28 +1,83 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.TerrainUtils;
 
 public class MarchingCubes : MonoBehaviour
 {
     MeshFilter meshFilter;
+    MeshCollider meshCollider;
 
     List<Vector3> vertices = new List<Vector3>();
     List<int> triangles = new List<int>();
 
-    int width = 9;
-    int height = 9;
-    int depth = 9;
+    [SerializeField] int xLength = 20;
+    [SerializeField] int yLength = 20;
+    [SerializeField] int zLength = 20;
     float[,,] terrainData;
-    float terrainHeight = 0.5f;
+    int terrainTriangeIndex = 0;
+    float t = 0f;
+    float max, min;
+    bool dostuff = false;
+    [SerializeField] float terrainHeight = 0.5f;
+    [SerializeField] float valueDisplayFontSize = 1f;
 
-    int _configIndex = -1;
+    [SerializeField] bool smoothTerrain = true;
+
+    [SerializeField] GameObject DebugParent = null;
+    [SerializeField] bool displayValues = true;
+    [SerializeField] int displayPlane = 0;
+    int displayPlanePrev = 0;
+    GameObject[,] valueDisplay;
+    TextMeshPro[,] valueDisplayText;
+
+    int counter = 0;
+
+    //int _configIndex = -1;
 
     void Start()
     {
+
+        max = yLength;
+        min = -yLength;
+
+        if (displayValues)
+        {
+            valueDisplay = new GameObject[xLength + 1, yLength + 1];
+            valueDisplayText = new TextMeshPro[xLength + 1, yLength + 1];
+            for (int i = 0; i < xLength + 1; i++)
+            {
+                for (int j = 0; j < yLength + 1; j++)
+                {
+                    for (int k = 0; k < zLength + 1; k++)
+                    {
+                        valueDisplay[i, j] = new GameObject();
+                        valueDisplay[i, j].transform.parent = DebugParent.transform;
+                    }
+                }
+            }
+            for (int i = 0; i < xLength + 1; i++)
+            {
+                for (int j = 0; j < yLength + 1; j++)
+                {
+                    for (int k = 0; k < zLength + 1; k++)
+                    {
+                        valueDisplay[i, j].AddComponent<TextMeshPro>();
+                        valueDisplayText[i, j] = valueDisplay[i, j].GetComponent<TextMeshPro>();
+                        valueDisplayText[i, j].fontSize = valueDisplayFontSize;
+                        valueDisplayText[i, j].color = Color.black;
+                        valueDisplayText[i, j].horizontalAlignment = HorizontalAlignmentOptions.Center;
+                        valueDisplayText[i, j].verticalAlignment = VerticalAlignmentOptions.Middle;
+                    }
+                }
+            }
+        }
+
         meshFilter = GetComponent<MeshFilter>();
         if (meshFilter == null) Debug.Log("MeshFilter is NULL!");
+        meshCollider = GetComponent<MeshCollider>();
+        if (meshFilter == null) Debug.Log("MeshCollider is NULL!");
         CreateTerrain();
         CreateMeshData();
         BuildMesh();
@@ -31,31 +86,131 @@ public class MarchingCubes : MonoBehaviour
 
     void Update()
     {
-        
+        if (Input.GetKeyDown(KeyCode.B))
+        {
+            Debug.Log("Mesh Rebuilt");
+            BuildMesh();
+        }
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            dostuff = !dostuff;
+        }
+        if (dostuff)
+        {
+            terrainHeight = Mathf.Lerp(min, max, t);
+            t += 0.1f * Time.deltaTime;
+            if (t > 1f)
+            {
+                float temp = min;
+                min = max;
+                max = temp;
+                t = 0f;
+            }
+            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
+            ClearData();
+            CreateMeshData();
+            BuildMesh();
+        }
+        if (Input.GetKeyDown(KeyCode.KeypadPlus))
+        {
+            t += 0.01f;
+            terrainHeight = Mathf.Lerp(-yLength, yLength, t);
+            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
+            ClearData();
+            CreateMeshData();
+            BuildMesh();
+        }
+        if (Input.GetKeyDown(KeyCode.KeypadMinus))
+        {
+            t -= 0.01f;
+            terrainHeight = Mathf.Lerp(-yLength, yLength, t);
+            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
+            ClearData();
+            CreateMeshData();
+            BuildMesh();
+        }
+        if (Input.GetKeyDown(KeyCode.R) && displayValues)
+        {
+            for (int i = 0; i < xLength + 1; i++)
+            {
+                for (int j = 0; j < yLength + 1; j++)
+                {
+                    valueDisplayText[i, j].fontSize = valueDisplayFontSize;
+                    valueDisplayText[i, j].text = SampleTerrain(new Vector3Int(i, j, displayPlane)).ToString();
+                    valueDisplay[i, j].transform.position = new Vector3Int(i, j, displayPlane);
+
+                }
+            }
+        }
+    }
+
+    private void OnDrawGizmos()
+    {
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireCube(new Vector3(xLength/2 + 0.5f, yLength/2 + 0.5f, zLength/2 + 0.5f), new Vector3(xLength + 1, yLength + 1, zLength + 1));
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        return;
+        for (int x = 0; x < xLength; x++)
+        {
+            for (int y = 0; y < yLength; y++)
+            {
+                for (int z = 0; z < zLength; z++)
+                {
+                    if(terrainData[x, y, z] >= 0f && terrainData[x, y, z] <= 1f)
+                    {
+                        //Gizmos.color = Color.blue;
+                        //Gizmos.DrawWireCube(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), new Vector3(1, 1, 1));
+                        if (terrainData[x, y, z] < 0.5f)
+                        {
+                            Gizmos.color = Color.red;
+                            Gizmos.DrawSphere(new Vector3(x, y, z), 0.1f);
+                        } 
+                        else
+                        {
+                            
+                            Gizmos.color = Color.green;
+                            Gizmos.DrawSphere(new Vector3(x, y, z), 0.1f);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     void CreateTerrain()
     {
+        
+
         float noiseValue;
-        float currentHeight;
-        terrainData = new float[width + 1, height + 1, depth + 1];
-        for (int w = 0; w < width + 1; w++)
+        float currentHeight = 3;
+        terrainData = new float[xLength + 1, yLength + 1, zLength + 1];
+        for (int x = 0; x < xLength + 1; x++)
         {
-            for (int d = 0; d < depth + 1; d++)
+            for (int z = 0; z < zLength + 1; z++)
             {
-                noiseValue = Mathf.PerlinNoise((float)w / 16f * 1.5f , (float)d / 16f * 1.5f);
-                currentHeight = height * noiseValue;
-                for (int h = 0; h < height + 1; h++)
+                //noiseValue = Mathf.PerlinNoise((float)x / 16f * 1.5f, (float)z / 16f * 1.5f);
+                //currentHeight = yLength * noiseValue;
+                
+                for (int y = 0; y < yLength + 1; y++)
                 {
-                    if (currentHeight < (float)h - 0.5f)
-                        terrainData[w, d, h] = 0f;
-                    else if (currentHeight > (float)h + 0.5f)
-                        terrainData[w, d, h] = 1f;
-                    else if(currentHeight < (float)h)
-                        terrainData[w, d ,h] = (float)h - currentHeight;
-                    else
-                        terrainData[w, d, h] = currentHeight - (float)h;
-                    
+                    noiseValue = 0;
+                    noiseValue += Mathf.PerlinNoise((float)x / 16f * 1.5f, (float)y / 16f * 1.5f);
+                    noiseValue += Mathf.PerlinNoise((float)y / 16f * 1.5f, (float)z / 16f * 1.5f);
+                    noiseValue += Mathf.PerlinNoise((float)x / 16f * 1.5f, (float)z / 16f * 1.5f);
+
+                    noiseValue += Mathf.PerlinNoise((float)y / 16f * 1.5f, (float)x / 16f * 1.5f);
+                    noiseValue += Mathf.PerlinNoise((float)z / 16f * 1.5f, (float)y / 16f * 1.5f);
+                    noiseValue += Mathf.PerlinNoise((float)z / 16f * 1.5f, (float)x / 16f * 1.5f);
+
+                    noiseValue /= 3f;
+
+                    currentHeight = yLength * noiseValue;
+                    terrainData[x, y, z] = (float)y - currentHeight;
+                    //terrainData[x, y, z] = noiseValue;
+
                 }
             }
         }
@@ -63,23 +218,19 @@ public class MarchingCubes : MonoBehaviour
 
     void CreateMeshData()
     {
-        for (int w = 0; w < width; w++)
+        counter = 0;
+        for (int x = 0; x < xLength; x++)
         {
-            for (int d = 0; d < depth; d++)
+            for (int y = 0; y < yLength; y++)
             {
-                for (int h = 0; h < height; h++)
+                for (int z = 0; z < zLength; z++)
                 {
-                    float[] cube = new float[8];
-                    for (int i = 0; i < 8; i++)
-                    {
-                        Vector3Int corner = new Vector3Int(w, d, h) + CornerTable[i];
-                        cube[i] = terrainData[corner.x, corner.y, corner.z];
-                    }
-
-                    MarchCube(new Vector3(w, d, h), cube);
+                    MarchCube(new Vector3Int(x, y, z));
                 }
             }
         }
+        Debug.Log("Searched: " + counter + " times.");
+        Debug.Log("Vertices: " + vertices.Count);
     }
 
     int GetCubeCongif(float[] cube)
@@ -93,39 +244,80 @@ public class MarchingCubes : MonoBehaviour
                 configIndex |= 1 << i;
             }
         }
-                Debug.Log(configIndex);
         return configIndex;
     }
 
-    void MarchCube(Vector3 position, float[] cube)
+    float SampleTerrain(Vector3Int point)
     {
+        return terrainData[point.x, point.y, point.z];
+    }
+
+    void MarchCube(Vector3Int position)
+    {
+        float[] cube = new float[8];
+        for (int i = 0; i < 8; i++)
+        {
+
+            cube[i] = SampleTerrain(position + CornerTable[i]);
+        }
 
         int configIndex = GetCubeCongif(cube);
 
         if (configIndex == 0 || configIndex == 255) return;
 
-        int edgeIndex = 0;
-        for (int i = 0; i < 5; i++)
+        for (int edgeIndex = 0; edgeIndex < 15; edgeIndex++)
         {
-            for (int j = 0; j < 2; j++)
+            int ind = TriangleTable[configIndex, edgeIndex];
+
+            if (ind == -1) return;
+
+            Vector3 vert1 = position + CornerTable[EdgeTable[ind, 0]];
+            Vector3 vert2 = position + CornerTable[EdgeTable[ind, 1]];
+
+            Vector3 vertPos;
+            if (smoothTerrain)
             {
-                int ind = TriangleTable[configIndex, edgeIndex];
+                float vert1Sample = cube[EdgeTable[ind, 0]];
+                float vert2Sample = cube[EdgeTable[ind, 1]];
 
-                if (ind == -1) return;
+                float difference = vert2Sample - vert1Sample;
 
-                Vector3 vert1 = position + EdgeTable[ind, 0];
-                Vector3 vert2 = position + EdgeTable[ind, 1];
+                if (difference == 0)
+                {
+                    Debug.Log("DIFFERENCE IS 0 AND IT SHOULD NEVER HAPPEN !!!");
+                }
 
-                Vector3 vertPos = (vert1 + vert2) / 2f;
-
-                vertices.Add(vertPos);
-                triangles.Add(vertices.Count -1);
-                edgeIndex++;
+                difference = (terrainHeight - vert1Sample) / difference;
+                
+                vertPos = vert1 + (vert2 - vert1) * difference;
             }
+            else
+            {
+                vertPos = (vert1 + vert2) / 2f;
+            }
+
+            
+            counter++;
+            int indexof = vertices.IndexOf(vertPos);
+            if (indexof != -1)
+            {
+                triangles.Add(indexof);
+            }
+            else 
+            {
+                vertices.Add(vertPos);
+                triangles.Add(vertices.Count - 1); 
+            }
+            
+
+            //vertices.Add(vertPos);
+            //triangles.Add(vertices.Count - 1);
+
         }
+
     }
 
-    void BlearData()
+    void ClearData()
     {
         vertices.Clear();
         triangles.Clear();
@@ -137,7 +329,10 @@ public class MarchingCubes : MonoBehaviour
         mesh.vertices = vertices.ToArray();
         mesh.triangles = triangles.ToArray();
         mesh.RecalculateNormals();
+
         meshFilter.mesh = mesh;
+        meshCollider.sharedMesh = mesh;
+        
     }
 
     
@@ -151,24 +346,37 @@ public class MarchingCubes : MonoBehaviour
         new Vector3Int(0, 0, 1),
         new Vector3Int(1, 0, 1),
         new Vector3Int(1, 1, 1),
-        new Vector3Int(0, 1, 1)
+        new Vector3Int(0, 1, 1) 
 
     };
 
-    Vector3[,] EdgeTable = new Vector3[12, 2] {
+    int[,] EdgeTable = new int[12, 2] {
 
-        { new Vector3(0.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f) },
-        { new Vector3(1.0f, 0.0f, 0.0f), new Vector3(1.0f, 1.0f, 0.0f) },
-        { new Vector3(0.0f, 1.0f, 0.0f), new Vector3(1.0f, 1.0f, 0.0f) },
-        { new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 1.0f, 0.0f) },
-        { new Vector3(0.0f, 0.0f, 1.0f), new Vector3(1.0f, 0.0f, 1.0f) },
-        { new Vector3(1.0f, 0.0f, 1.0f), new Vector3(1.0f, 1.0f, 1.0f) },
-        { new Vector3(0.0f, 1.0f, 1.0f), new Vector3(1.0f, 1.0f, 1.0f) },
-        { new Vector3(0.0f, 0.0f, 1.0f), new Vector3(0.0f, 1.0f, 1.0f) },
-        { new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 0.0f, 1.0f) },
-        { new Vector3(1.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 1.0f) },
-        { new Vector3(1.0f, 1.0f, 0.0f), new Vector3(1.0f, 1.0f, 1.0f) },
-        { new Vector3(0.0f, 1.0f, 0.0f), new Vector3(0.0f, 1.0f, 1.0f) }
+        {0, 1},
+        {1, 2},
+        {3, 2},
+        {0, 3},
+        {4, 5},
+        {5, 6},
+        {7, 6},
+        {4, 7},
+        {0, 4},
+        {1, 5},
+        {2, 6},
+        {3, 7}
+
+        //{ new Vector3(0.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 0.0f) },
+        //{ new Vector3(1.0f, 0.0f, 0.0f), new Vector3(1.0f, 1.0f, 0.0f) },
+        //{ new Vector3(0.0f, 1.0f, 0.0f), new Vector3(1.0f, 1.0f, 0.0f) },
+        //{ new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 1.0f, 0.0f) },
+        //{ new Vector3(0.0f, 0.0f, 1.0f), new Vector3(1.0f, 0.0f, 1.0f) },
+        //{ new Vector3(1.0f, 0.0f, 1.0f), new Vector3(1.0f, 1.0f, 1.0f) },
+        //{ new Vector3(0.0f, 1.0f, 1.0f), new Vector3(1.0f, 1.0f, 1.0f) },
+        //{ new Vector3(0.0f, 0.0f, 1.0f), new Vector3(0.0f, 1.0f, 1.0f) },
+        //{ new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.0f, 0.0f, 1.0f) },
+        //{ new Vector3(1.0f, 0.0f, 0.0f), new Vector3(1.0f, 0.0f, 1.0f) },
+        //{ new Vector3(1.0f, 1.0f, 0.0f), new Vector3(1.0f, 1.0f, 1.0f) },
+        //{ new Vector3(0.0f, 1.0f, 0.0f), new Vector3(0.0f, 1.0f, 1.0f) }
 
     };
 
