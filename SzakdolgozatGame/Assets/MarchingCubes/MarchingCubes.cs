@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TMPro;
 using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.UIElements;
 
 public class MarchingCubes : MonoBehaviour
 {
@@ -219,13 +220,79 @@ public class MarchingCubes : MonoBehaviour
     void CreateMeshData()
     {
         counter = 0;
+        int[,,,] vertexIndexArray = new int[xLength, yLength, zLength, 12];
         for (int x = 0; x < xLength; x++)
         {
             for (int y = 0; y < yLength; y++)
             {
                 for (int z = 0; z < zLength; z++)
                 {
-                    MarchCube(new Vector3Int(x, y, z));
+                    Vector3Int position = new Vector3Int(x, y, z);
+                    //MarchCube(new Vector3Int(x, y, z));
+                    //----------------------------------------------------------------------------------------------------
+                    float[] cube = new float[8];
+                    for (int i = 0; i < 8; i++)
+                    {
+
+                        cube[i] = SampleTerrain(position + CornerTable[i]);
+                    }
+
+                    int configIndex = GetCubeCongif(cube);
+
+                    if (configIndex == 0 || configIndex == 255) return;
+
+                    for (int edgeIndex = 0; edgeIndex < 15; edgeIndex++)
+                    {
+                        int ind = TriangleTable[configIndex, edgeIndex];
+                        if (ind == -1) return;
+
+                        Vector3 vert1 = position + CornerTable[EdgeTable[ind, 0]];
+                        Vector3 vert2 = position + CornerTable[EdgeTable[ind, 1]];
+
+                        Vector3 vertPos;
+                        if (smoothTerrain)
+                        {
+                            float vert1Sample = cube[EdgeTable[ind, 0]];
+                            float vert2Sample = cube[EdgeTable[ind, 1]];
+
+                            float difference = vert2Sample - vert1Sample;
+
+                            if (difference == 0)
+                            {
+                                Debug.Log("DIFFERENCE IS 0 AND IT SHOULD NEVER HAPPEN !!!");
+                            }
+
+                            difference = (terrainHeight - vert1Sample) / difference;
+
+                            vertPos = vert1 + (vert2 - vert1) * difference;
+                        }
+                        else
+                        {
+                            vertPos = (vert1 + vert2) / 2f;
+                        }
+
+
+                        counter++;
+                        int indexof = vertices.IndexOf(vertPos);
+                        if (indexof != -1)
+                        {
+                            triangles.Add(indexof);
+                        }
+                        else
+                        {
+                            vertices.Add(vertPos);
+                            triangles.Add(vertices.Count - 1);
+                        }
+
+
+                        //vertices.Add(vertPos);
+                        //triangles.Add(vertices.Count - 1);
+
+                    }
+                    //----------------------------------------------------------------------------------------------------
+
+
+
                 }
             }
         }
@@ -335,9 +402,9 @@ public class MarchingCubes : MonoBehaviour
         
     }
 
-    
 
-    Vector3Int[] CornerTable = new Vector3Int[8] {
+
+    private readonly Vector3Int[] CornerTable = new Vector3Int[8] {
 
         new Vector3Int(0, 0, 0),
         new Vector3Int(1, 0, 0),
@@ -350,7 +417,7 @@ public class MarchingCubes : MonoBehaviour
 
     };
 
-    int[,] EdgeTable = new int[12, 2] {
+    private readonly int[,] EdgeTable = new int[12, 2] {
 
         {0, 1},
         {1, 2},
@@ -380,7 +447,7 @@ public class MarchingCubes : MonoBehaviour
 
     };
 
-    private int[,] TriangleTable = new int[,] {
+    private readonly int[,] TriangleTable = new int[,] {
 
         {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
         {0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},

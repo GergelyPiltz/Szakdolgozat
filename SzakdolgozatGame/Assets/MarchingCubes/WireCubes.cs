@@ -62,9 +62,10 @@ public class WireCubes : MonoBehaviour
                 {
                     for (int c = 0; c < 12; c++)
                     {
+                        
                         Sphere0.transform.position = new Vector3(i, j, k) + CornerTable[EdgeTable[c, 0]];
                         Sphere1.transform.position = new Vector3(i, j, k) + CornerTable[EdgeTable[c, 1]];
-                        yield return new WaitForSeconds(w);
+                        yield return new WaitForSeconds(5);
                     }
                 }
             }

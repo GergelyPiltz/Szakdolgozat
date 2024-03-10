@@ -1,0 +1,61 @@
+If the CornerTable and EdgeTable as follows:
+
+Vector3Int[] CornerTable = new Vector3Int[8] {
+    new Vector3Int(0, 0, 0),
+    new Vector3Int(1, 0, 0),
+    new Vector3Int(1, 1, 0),
+    new Vector3Int(0, 1, 0),
+    new Vector3Int(0, 0, 1),
+    new Vector3Int(1, 0, 1),
+    new Vector3Int(1, 1, 1),
+    new Vector3Int(0, 1, 1) 
+};
+
+int[,] EdgeTable = new int[12, 2] {
+    {0, 1},
+    {1, 2},
+    {3, 2},
+    {0, 3},
+    {4, 5},
+    {5, 6},
+    {7, 6},
+    {4, 7},
+    {0, 4},
+    {1, 5},
+    {2, 6},
+    {3, 7}
+};
+
+then we can label the cubes edges from 0 to 11 (array indices) as seen on the image.
+We store these cubes in a 3 dimensional array as arrays of 12 indices. An array of 12 indices is an individual cube.
+If we start placing cubes next to each other a pattern emerges on each axis to what indices we can copy from the previous cube.
+
+ Curr Edge = Prev Edge
+X:	3  = 1
+	8  = 9
+	7  = 5
+	11 = 10
+
+Y:	0  = 2
+	9  = 10
+	4  = 6
+	8  = 11
+
+Z:	0  = 4
+	1  = 5
+	2  = 6
+	3  = 7
+
+Notice how three edges are missing from within the Current Edges: 5, 6, 10.
+These edges are never copied indices from the previous cube, meaining that these edges are the ones actually calculated.
+
+Notice how three edges are missing from within the Previous Edges: 0, 3, 8.
+These edges never get copied to the next cube, meaining that these are the ones always left behind.
+
+If we also take into account that we can only copy on a certain axis if the cube is NOT the first (index > 0), so there is a cube before it on that axis, all edges calculated will be necessary, while the rest already exists and can be copied.
+
+The double presence of 0, 3, and 8 within the current edges mean that those edges can be copied from two previos cubes on each axis with the same result.
+Those still must be left as viable options, since it is possible that on an axis the current cube is the first,
+so no edges can be copied on that axis, but from an other axis the values can be carried over.
+Example: 
+If the Z axis is unavialable, the value of the 0th edge will be copied from axis Y instead and the 3rd edge will be copied from X instead, still maintaining efficency.  
