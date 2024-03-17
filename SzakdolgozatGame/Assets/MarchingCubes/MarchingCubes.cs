@@ -220,7 +220,7 @@ public class MarchingCubes : MonoBehaviour
     void CreateMeshData()
     {
         counter = 0;
-        int[,,,] vertexIndexArray = new int[xLength, yLength, zLength, 12];
+        int[,,,] vertexIndexArray = new int[xLength, yLength, zLength, 16];
         for (int x = 0; x < xLength; x++)
         {
             for (int y = 0; y < yLength; y++)
@@ -245,6 +245,8 @@ public class MarchingCubes : MonoBehaviour
                     {
                         int ind = TriangleTable[configIndex, edgeIndex];
                         if (ind == -1) return;
+
+                        //here
 
                         Vector3 vert1 = position + CornerTable[EdgeTable[ind, 0]];
                         Vector3 vert2 = position + CornerTable[EdgeTable[ind, 1]];
