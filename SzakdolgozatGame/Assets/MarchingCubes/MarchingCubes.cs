@@ -1,9 +1,13 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using TMPro;
 using Unity.VisualScripting;
+using UnityEditorInternal;
 using UnityEngine;
 using UnityEngine.UIElements;
+using Debug = UnityEngine.Debug;
 
 public class MarchingCubes : MonoBehaviour
 {
@@ -39,7 +43,8 @@ public class MarchingCubes : MonoBehaviour
 
     void Start()
     {
-
+        Debug.Log("rows: " + TriangleTable.Length);
+        Debug.Log("cols: " + TriangleTable.GetLength(1));
         max = yLength;
         min = -yLength;
 
@@ -107,27 +112,27 @@ public class MarchingCubes : MonoBehaviour
                 max = temp;
                 t = 0f;
             }
-            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
             ClearData();
             CreateMeshData();
+            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
             BuildMesh();
         }
         if (Input.GetKeyDown(KeyCode.KeypadPlus))
         {
             t += 0.01f;
             terrainHeight = Mathf.Lerp(-yLength, yLength, t);
-            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
             ClearData();
             CreateMeshData();
+            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
             BuildMesh();
         }
         if (Input.GetKeyDown(KeyCode.KeypadMinus))
         {
             t -= 0.01f;
             terrainHeight = Mathf.Lerp(-yLength, yLength, t);
-            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
             ClearData();
             CreateMeshData();
+            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
             BuildMesh();
         }
         if (Input.GetKeyDown(KeyCode.R) && displayValues)
@@ -148,7 +153,7 @@ public class MarchingCubes : MonoBehaviour
     private void OnDrawGizmos()
     {
         Gizmos.color = Color.yellow;
-        Gizmos.DrawWireCube(new Vector3(xLength/2 + 0.5f, yLength/2 + 0.5f, zLength/2 + 0.5f), new Vector3(xLength + 1, yLength + 1, zLength + 1));
+        Gizmos.DrawWireCube(new Vector3(xLength/2, yLength/2, zLength/2), new Vector3(xLength, yLength, zLength));
     }
 
     private void OnDrawGizmosSelected()
@@ -219,8 +224,8 @@ public class MarchingCubes : MonoBehaviour
 
     void CreateMeshData()
     {
-        counter = 0;
         int[,,,] vertexIndexArray = new int[xLength, yLength, zLength, 16];
+        //vertexIndexArray = Initialize4DArrayWithValue(vertexIndexArray, 0);
         for (int x = 0; x < xLength; x++)
         {
             for (int y = 0; y < yLength; y++)
@@ -228,78 +233,186 @@ public class MarchingCubes : MonoBehaviour
                 for (int z = 0; z < zLength; z++)
                 {
                     Vector3Int position = new Vector3Int(x, y, z);
-                    //MarchCube(new Vector3Int(x, y, z));
                     //----------------------------------------------------------------------------------------------------
                     float[] cube = new float[8];
                     for (int i = 0; i < 8; i++)
                     {
-
                         cube[i] = SampleTerrain(position + CornerTable[i]);
                     }
 
                     int configIndex = GetCubeCongif(cube);
 
-                    if (configIndex == 0 || configIndex == 255) return;
+                    if (configIndex == 0 || configIndex == 255) continue;
 
-                    for (int edgeIndex = 0; edgeIndex < 15; edgeIndex++)
+                    for (int edgeCounter = 0; edgeCounter < 16; edgeCounter++)
                     {
-                        int ind = TriangleTable[configIndex, edgeIndex];
-                        if (ind == -1) return;
+                        int edgeIndex = TriangleTable[configIndex, edgeCounter];
 
-                        //here
+                        if (edgeIndex == -1) break;
 
-                        Vector3 vert1 = position + CornerTable[EdgeTable[ind, 0]];
-                        Vector3 vert2 = position + CornerTable[EdgeTable[ind, 1]];
-
-                        Vector3 vertPos;
-                        if (smoothTerrain)
+                        switch (edgeIndex)
                         {
-                            float vert1Sample = cube[EdgeTable[ind, 0]];
-                            float vert2Sample = cube[EdgeTable[ind, 1]];
-
-                            float difference = vert2Sample - vert1Sample;
-
-                            if (difference == 0)
-                            {
-                                Debug.Log("DIFFERENCE IS 0 AND IT SHOULD NEVER HAPPEN !!!");
-                            }
-
-                            difference = (terrainHeight - vert1Sample) / difference;
-
-                            vertPos = vert1 + (vert2 - vert1) * difference;
+                            case 0:
+                                if (y > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y - 1, z, 2];
+                                    triangles.Add(vertexIndexArray[x, y - 1, z, 2]);
+                                }
+                                else if (z > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y, z - 1, 4];
+                                    triangles.Add(vertexIndexArray[x, y, z - 1, 4]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 1:
+                                if (z > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y, z - 1, 5];
+                                    triangles.Add(vertexIndexArray[x, y, z - 1, 5]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 2:
+                                if (z > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y, z - 1, 6];
+                                    triangles.Add(vertexIndexArray[x, y, z - 1, 6]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 3:
+                                if (x > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x - 1, y, z, 1];
+                                    triangles.Add(vertexIndexArray[x - 1, y, z, 1]);
+                                }
+                                else if (z > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y, z - 1, 7];
+                                    triangles.Add(vertexIndexArray[x, y, z - 1, 7]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 4:
+                                if (y > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y - 1, z, 6];
+                                    triangles.Add(vertexIndexArray[x, y - 1, z, 6]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 7:
+                                if (x > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x - 1, y, z, 5];
+                                    triangles.Add(vertexIndexArray[x - 1, y, z, 5]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 8:
+                                if (x > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x - 1, y, z, 9];
+                                    triangles.Add(vertexIndexArray[x - 1, y, z, 9]);
+                                }
+                                else if (y > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y - 1, z, 11];
+                                    triangles.Add(vertexIndexArray[x, y - 1, z, 11]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 9:
+                                if (y > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x, y - 1, z, 10];
+                                    triangles.Add(vertexIndexArray[x, y - 1, z, 10]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            case 11:
+                                if (x > 0)
+                                {
+                                    vertexIndexArray[x, y, z, edgeIndex] = vertexIndexArray[x - 1, y, z, 10];
+                                    triangles.Add(vertexIndexArray[x - 1, y, z, 10]);
+                                }
+                                else
+                                    vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                break;
+                            default:
+                                vertexIndexArray[x, y, z, edgeIndex] = CalculateVertex(position, edgeIndex, cube);
+                                //Debug.Log(edgeIndex);
+                                break;
                         }
-                        else
-                        {
-                            vertPos = (vert1 + vert2) / 2f;
-                        }
-
-
-                        counter++;
-                        int indexof = vertices.IndexOf(vertPos);
-                        if (indexof != -1)
-                        {
-                            triangles.Add(indexof);
-                        }
-                        else
-                        {
-                            vertices.Add(vertPos);
-                            triangles.Add(vertices.Count - 1);
-                        }
-
-
-                        //vertices.Add(vertPos);
-                        //triangles.Add(vertices.Count - 1);
-
                     }
-                    //----------------------------------------------------------------------------------------------------
-
-
-
                 }
             }
         }
-        Debug.Log("Searched: " + counter + " times.");
-        Debug.Log("Vertices: " + vertices.Count);
+        Debug.Log("triangle indices: " + triangles.Count);
+        //Debug.Log("----->" + FindMostCommonValue(vertexIndexArray));
+    }
+
+    static int FindMostCommonValue(int[,,,] array)
+    {
+        Dictionary<int, int> frequencyMap = new Dictionary<int, int>();
+
+        foreach (var element in array)
+        {
+            if (frequencyMap.ContainsKey(element))
+            {
+                frequencyMap[element]++;
+            }
+            else
+            {
+                frequencyMap[element] = 1;
+            }
+        }
+
+        int mostCommonValue = frequencyMap.OrderByDescending(pair => pair.Value).First().Key;
+        return mostCommonValue;
+    }
+
+    int CalculateVertex(Vector3Int position, int index, float[] cube)
+    {
+        
+        Vector3 vert1 = position + CornerTable[EdgeTable[index, 0]];
+        Vector3 vert2 = position + CornerTable[EdgeTable[index, 1]];
+
+        Vector3 vertPos;
+        if (smoothTerrain)
+        {
+            float vert1Sample = cube[EdgeTable[index, 0]];
+            float vert2Sample = cube[EdgeTable[index, 1]];
+
+            float difference = vert2Sample - vert1Sample;
+
+            if (difference == 0)
+            {
+                Debug.Log("DIFFERENCE IS 0 AND IT SHOULD NEVER HAPPEN !!!");
+            }
+
+            difference = (terrainHeight - vert1Sample) / difference;
+
+            vertPos = vert1 + (vert2 - vert1) * difference;
+        }
+        else
+        {
+            vertPos = (vert1 + vert2) / 2f;
+        }
+
+        vertices.Add(vertPos);
+        triangles.Add(vertices.Count - 1);
+
+        return (vertices.Count - 1);
     }
 
     int GetCubeCongif(float[] cube)
@@ -404,7 +517,23 @@ public class MarchingCubes : MonoBehaviour
         
     }
 
-
+    int[,,,] Initialize4DArrayWithValue(int[,,,] array, int value)
+    {
+        for (int i = 0; i < array.GetLength(0); i++)
+        {
+            for (int j = 0; j < array.GetLength(1); j++)
+            {
+                for (int k = 0; k < array.GetLength(2); k++)
+                {
+                    for (int l = 0; l < array.GetLength(3); l++)
+                    {
+                        array[i, j, k, l] = value;
+                    }
+                }
+            }
+        }
+        return array;
+    }
 
     private readonly Vector3Int[] CornerTable = new Vector3Int[8] {
 
