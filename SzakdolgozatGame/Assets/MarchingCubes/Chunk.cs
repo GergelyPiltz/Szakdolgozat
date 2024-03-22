@@ -1,202 +1,69 @@
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
-using Debug = UnityEngine.Debug;
 
-public class MarchingCubes : MonoBehaviour
+public class Chunk
 {
-    MeshFilter meshFilter;
-    MeshCollider meshCollider;
+    GameObject chunkObject;
+    Vector3Int chunkPosition;
 
-    List<Vector3> vertices = new();
-    List<int> triangles = new();
+    MeshFilter   meshFilter;
+    MeshCollider meshCollider;
+    MeshRenderer meshRenderer;
+
+    List<Vector3> vertices;
+    List<int> triangles;
+
+    int xLength = 20;
+    int yLength = 20;
+    int zLength = 20;
+    float terrainHeight = 0f;
+
+    bool smoothTerrain = true;
 
     float[,,] terrainData;
-    [SerializeField] int xLength = 20;
-    [SerializeField] int yLength = 20;
-    [SerializeField] int zLength = 20;
-    [SerializeField] float terrainHeight = 0f;
-    [SerializeField] bool smoothTerrain = true;
-
     int[,,,] vertexIndexArray;
 
-    float t = 0f;
-    float max, min;
-    bool dostuff = false;
-
-    [SerializeField] float valueDisplayFontSize = 1f;
-    [SerializeField] GameObject DebugParent = null;
-    [SerializeField] bool displayValues = true;
-    [SerializeField] int displayPlane = 0;
-    GameObject[,] valueDisplay;
-    TextMeshPro[,] valueDisplayText;
-
-    void Start()
+    public Chunk (Vector3Int _position, Transform parent, int index)
     {
+        chunkObject = new GameObject();
+        chunkObject.transform.parent = parent;
+        chunkObject.name = "Chunk(" + index + ")"; 
+        chunkPosition = _position;
+        chunkObject.transform.position = chunkPosition;
+
+        meshFilter = chunkObject.AddComponent<MeshFilter>();
+        meshCollider = chunkObject.AddComponent<MeshCollider>();
+        meshRenderer = chunkObject.AddComponent<MeshRenderer>();
+        meshRenderer.material = Resources.Load<Material>("Materials/Terrain");
+
+        terrainData = new float[xLength + 1, yLength + 1, zLength + 1];
         vertexIndexArray = new int[xLength, yLength, zLength, 12];
 
-        max = yLength;
-        min = -yLength;
+        vertices = new();
+        triangles = new();
 
-        if (displayValues)
-        {
-            valueDisplay = new GameObject[xLength + 1, yLength + 1];
-            valueDisplayText = new TextMeshPro[xLength + 1, yLength + 1];
-            for (int i = 0; i < xLength + 1; i++)
-            {
-                for (int j = 0; j < yLength + 1; j++)
-                {
-                    for (int k = 0; k < zLength + 1; k++)
-                    {
-                        valueDisplay[i, j] = new GameObject();
-                        valueDisplay[i, j].transform.parent = DebugParent.transform;
-                    }
-                }
-            }
-            for (int i = 0; i < xLength + 1; i++)
-            {
-                for (int j = 0; j < yLength + 1; j++)
-                {
-                    for (int k = 0; k < zLength + 1; k++)
-                    {
-                        valueDisplay[i, j].AddComponent<TextMeshPro>();
-                        valueDisplayText[i, j] = valueDisplay[i, j].GetComponent<TextMeshPro>();
-                        valueDisplayText[i, j].fontSize = valueDisplayFontSize;
-                        valueDisplayText[i, j].color = Color.black;
-                        valueDisplayText[i, j].horizontalAlignment = HorizontalAlignmentOptions.Center;
-                        valueDisplayText[i, j].verticalAlignment = VerticalAlignmentOptions.Middle;
-                    }
-                }
-            }
-        }
-
-        if (!TryGetComponent(out meshFilter))
-        {
-            Debug.Log("MeshFilter is NULL!");
-            GetComponent<MarchingCubes>().enabled = false;
-        }
-
-        if (!TryGetComponent(out meshCollider)) 
-        {
-            Debug.Log("MeshCollider is NULL!");
-            GetComponent<MarchingCubes>().enabled = false;
-        }
-
-        CreateTerrain();
+        CreateTerrainData();
         CreateMeshData();
         BuildMesh();
 
     }
 
-    void Update()
+    void CreateTerrainData()
     {
-        if (Input.GetKeyDown(KeyCode.B))
-        {
-            Debug.Log("Mesh Rebuilt");
-            BuildMesh();
-        }
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            dostuff = !dostuff;
-        }
-        if (dostuff)
-        {
-            terrainHeight = Mathf.Lerp(min, max, t);
-            t += 0.1f * Time.deltaTime;
-            if (t > 1f)
-            {
-                (max, min) = (min, max);
-                t = 0f;
-            }
-            ClearData();
-            CreateMeshData();
-            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
-            BuildMesh();
-        }
-        if (Input.GetKeyDown(KeyCode.KeypadPlus))
-        {
-            t += 0.01f;
-            terrainHeight = Mathf.Lerp(-yLength, yLength, t);
-            ClearData();
-            CreateMeshData();
-            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
-            BuildMesh();
-        }
-        if (Input.GetKeyDown(KeyCode.KeypadMinus))
-        {
-            t -= 0.01f;
-            terrainHeight = Mathf.Lerp(-yLength, yLength, t);
-            ClearData();
-            CreateMeshData();
-            Debug.Log("HEIGHT: " + (int)terrainHeight + " TRIANGLES: " + triangles.Count / 3);
-            BuildMesh();
-        }
-        if (Input.GetKeyDown(KeyCode.R) && displayValues)
-        {
-            for (int i = 0; i < xLength + 1; i++)
-            {
-                for (int j = 0; j < yLength + 1; j++)
-                {
-                    valueDisplayText[i, j].fontSize = valueDisplayFontSize;
-                    valueDisplayText[i, j].text = SampleTerrain(new Vector3Int(i, j, displayPlane)).ToString();
-                    valueDisplay[i, j].transform.position = new Vector3Int(i, j, displayPlane);
 
-                }
-            }
-        }
-    }
-
-    private void OnDrawGizmos()
-    {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireCube(new Vector3(xLength/2, yLength/2, zLength/2), new Vector3(xLength, yLength, zLength));
-    }
-
-    private void OnDrawGizmosSelected()
-    {
-        return;
-        for (int x = 0; x < xLength; x++)
-        {
-            for (int y = 0; y < yLength; y++)
-            {
-                for (int z = 0; z < zLength; z++)
-                {
-                    if(terrainData[x, y, z] >= 0f && terrainData[x, y, z] <= 1f)
-                    {
-                        //Gizmos.color = Color.blue;
-                        //Gizmos.DrawWireCube(new Vector3(x + 0.5f, y + 0.5f, z + 0.5f), new Vector3(1, 1, 1));
-                        if (terrainData[x, y, z] < 0.5f)
-                        {
-                            Gizmos.color = Color.red;
-                            Gizmos.DrawSphere(new Vector3(x, y, z), 0.1f);
-                        } 
-                        else
-                        {
-                            
-                            Gizmos.color = Color.green;
-                            Gizmos.DrawSphere(new Vector3(x, y, z), 0.1f);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    void CreateTerrain()
-    {
-        
         float noiseValue;
         float currentHeight;
-        terrainData = new float[xLength + 1, yLength + 1, zLength + 1];
+        
         for (int x = 0; x < xLength + 1; x++)
         {
             for (int z = 0; z < zLength + 1; z++)
             {
-                //noiseValue = Mathf.PerlinNoise((float)x / 16f * 1.5f, (float)z / 16f * 1.5f);
-                //currentHeight = yLength * noiseValue;
+                noiseValue = Mathf.PerlinNoise((x + chunkPosition.x) / 16f * 1.5f, (z + chunkPosition.z) / 16f * 1.5f);
+                currentHeight = yLength * noiseValue;
                 
                 for (int y = 0; y < yLength + 1; y++)
                 {
+                    /*
                     noiseValue = 0;
                     noiseValue += Mathf.PerlinNoise((float)x / 16f * 1.5f, (float)y / 16f * 1.5f);
                     noiseValue += Mathf.PerlinNoise((float)y / 16f * 1.5f, (float)z / 16f * 1.5f);
@@ -205,14 +72,14 @@ public class MarchingCubes : MonoBehaviour
                     noiseValue += Mathf.PerlinNoise((float)y / 16f * 1.5f, (float)x / 16f * 1.5f);
                     noiseValue += Mathf.PerlinNoise((float)z / 16f * 1.5f, (float)y / 16f * 1.5f);
                     noiseValue += Mathf.PerlinNoise((float)z / 16f * 1.5f, (float)x / 16f * 1.5f);
-
                     noiseValue /= 6f;
-
+                    
                     currentHeight = yLength * noiseValue;
+                    */
                     terrainData[x, y, z] = (float)y - currentHeight;
-                    //terrainData[x, y, z] = noiseValue;
 
                 }
+                
             }
         }
     }
@@ -220,7 +87,6 @@ public class MarchingCubes : MonoBehaviour
 
     void CreateMeshData()
     {
-        //int[,,,] vertexIndexArray = new int[xLength, yLength, zLength, 12];
         for (int x = 0; x < xLength; x++)
         {
             for (int y = 0; y < yLength; y++)
@@ -351,12 +217,11 @@ public class MarchingCubes : MonoBehaviour
                 }
             }
         }
-        Debug.Log("triangle indices: " + triangles.Count);
     }
 
     int CalculateVertex(Vector3Int position, int index, float[] cube)
     {
-        
+
         Vector3 vert1 = position + Tables.CornerTable[Tables.EdgeTable[index, 0]];
         Vector3 vert2 = position + Tables.CornerTable[Tables.EdgeTable[index, 1]];
 
@@ -407,26 +272,17 @@ public class MarchingCubes : MonoBehaviour
         return terrainData[point.x, point.y, point.z];
     }
 
-    void ClearData()
-    {
-        vertices.Clear();
-        triangles.Clear();
-    }
-
     void BuildMesh()
     {
-        Mesh mesh = new Mesh();
-        mesh.vertices = vertices.ToArray();
-        mesh.triangles = triangles.ToArray();
+        Mesh mesh = new()
+        {
+            vertices = vertices.ToArray(),
+            triangles = triangles.ToArray()
+        };
         mesh.RecalculateNormals();
 
         meshFilter.mesh = mesh;
         meshCollider.sharedMesh = mesh;
-        
+
     }
-
-    
-
-    
-
 }
